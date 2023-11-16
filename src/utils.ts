@@ -45,7 +45,7 @@ export function toCsv(columns: string[], rows: string[][]) {
   return stringify([columns, ...rows]);
 }
 
-export async function fromCsv(filename: string, columns: string[]) {
+export async function fromCsv(filename: string, columns?: string[] | boolean) {
   const csvStr = await fs.readFile(filename, 'utf8');
 
   return parse(csvStr, {

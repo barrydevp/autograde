@@ -2,7 +2,26 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { parse, NodeType } from 'node-html-parser';
 import { COOKIE, DATA_PATH, SUBMISSION_PATH } from './constants';
-import { dfs, toCsv } from './utils';
+import { dfs, fromCsv, toCsv } from './utils';
+
+const RAW_COLS = [
+  'Select',
+  'User picture',
+  'First name',
+  'Username',
+  'Email address',
+  'Status',
+  'Grade',
+  'Edit',
+  'Last modified (submission)',
+  'File submissions',
+  'Submission comments',
+  'Last modified (grade)',
+  'Feedback comments',
+  'Annotate PDF',
+  'Final grade',
+];
+const ACCEPTED_RAW_COLS = [2, 3, 4, 5, 8, 9];
 
 export const COLUMN_MAP = {
   name: 2,
@@ -15,6 +34,10 @@ export const COLUMN_MAP = {
 
 export function getColIdx(name: string) {
   return COLUMN_MAP[name] || -1;
+}
+
+export function getColKey(name: string) {
+  return RAW_COLS[getColIdx(name)];
 }
 
 async function readReportHtml(filename: string) {
@@ -41,7 +64,10 @@ export async function parseReport(filename: string) {
 
   const thead = table.querySelectorAll('thead tr');
 
-  for (const th of thead[0].childNodes) {
+  for (const [i, th] of thead[0].childNodes.entries()) {
+    // if (!ACCEPTED_RAW_COLS.includes(i)) {
+    //   continue;
+    // }
     const textNode = dfs(th, (n) => {
       return n.nodeType == NodeType.TEXT_NODE;
     });
@@ -53,6 +79,9 @@ export async function parseReport(filename: string) {
   for (const tr of tbody) {
     const row = [];
     for (const [i, td] of tr.childNodes.entries()) {
+      // if (!ACCEPTED_RAW_COLS.includes(i)) {
+      //   continue;
+      // }
       let textNode = null;
       // Status column, get the late date submission
       if (i === 5) {
@@ -79,6 +108,19 @@ export async function exportWeekReport(week: string) {
 
   const csvStr = toCsv(columns, rows);
   await fs.writeFile(path.join(DATA_PATH, `${week}.csv`), csvStr);
+}
+
+export async function readWeekReport(week: string) {
+  const data = await fromCsv(
+    path.join(DATA_PATH, `${week}.csv`),
+    true,
+    // ACCEPTED_RAW_COLS.map((i) => RAW_COLS[i]),
+  );
+
+  return data.reduce((p, e) => {
+    p[e[getColKey('id')]] = e;
+    return p;
+  }, {});
 }
 
 export async function downloadReportPhp(id: string, week: string) {

@@ -43,24 +43,26 @@ export async function downloadSubmission(id: string, week: string) {
 }
 
 export async function unzipAssignment(week: string) {
-  // await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
+  await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
+  console.log(`Unzipped ${week}.zip`);
 
-  const files = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
-    // withFileTypes: true,
+  const dirents = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
+    withFileTypes: true,
   });
 
-  // for (const file of files) {
-  //   const filePath = path.parse(file);
-  //   if (filePath.ext === '.rar') {
-  //     console.log(await unrar(file, { list: true }));
-  //   } else {
-  //     console.log(
-  //       await unzip(file, { list: true }).catch(
-  //         () => unrar(file, { list: true }), // fallback to rar
-  //       ),
-  //     );
-  //   }
-  // }
+  for (const dirent of dirents) {
+    const file = dirent.fullpath();
+    const filePath = path.parse(file);
+    if (filePath.ext === '.rar') {
+      console.log(await unrar(file, { list: false }));
+    } else {
+      console.log(
+        await unzip(file, { list: false }).catch(
+          () => unrar(file, { list: false }), // fallback to rar
+        ),
+      );
+    }
+  }
 }
 
 export async function rmAssignment(week: string) {

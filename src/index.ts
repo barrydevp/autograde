@@ -1,6 +1,11 @@
 import 'dotenv/config';
 import * as fs from 'node:fs/promises';
-import { downloadReportPhp, exportWeekReport, parseReport } from './report';
+import {
+  downloadReportPhp,
+  exportWeekReport,
+  parseReport,
+  readWeekReport,
+} from './report';
 import { fromCsv, toCsv } from './utils';
 import * as path from 'path';
 import { DATA_PATH } from './constants';
@@ -20,7 +25,8 @@ async function main() {
 
   for (const week of weeks) {
     console.log(`Executing week ${week.name}`);
-    await grade(week.name);
+    console.log(await readWeekReport(week.name));
+    // await grade(week.name);
     // await downloadSubmission(week.id, week.name);
     // await downloadReportPhp(week.id, week.name);
     // await exportWeekReport(week.name);
