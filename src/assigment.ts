@@ -2,9 +2,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
-import { globSync } from 'glob';
+import { Path, globSync } from 'glob';
 import { rimraf } from 'rimraf';
 import { COOKIE, SUBMISSION_PATH } from './constants';
+import EvalFns from './evaluates';
 import { unrar, unzip } from './utils';
 
 export async function downloadSubmission(id: string, week: string) {
@@ -43,34 +44,57 @@ export async function downloadSubmission(id: string, week: string) {
 }
 
 export async function unzipAssignment(week: string) {
-  await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
-  console.log(`Unzipped ${week}.zip`);
-
+  // await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
+  // console.log(`Unzipped ${week}.zip`);
+  //
   const dirents = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
     withFileTypes: true,
-  });
+  }).filter((e) => e.isFile());
 
-  for (const dirent of dirents) {
-    const file = dirent.fullpath();
-    const filePath = path.parse(file);
-    if (filePath.ext === '.rar') {
-      console.log(await unrar(file, { list: false }));
-    } else {
-      console.log(
-        await unzip(file, { list: false }).catch(
-          () => unrar(file, { list: false }), // fallback to rar
-        ),
-      );
-    }
-  }
+  // for (const dirent of dirents) {
+  //   const file = dirent.fullpath();
+  //   const filePath = path.parse(file);
+  //   if (filePath.ext === '.rar') {
+  //     await unrar(file, { list: false });
+  //   } else {
+  //     await unzip(file, { list: false }).catch(
+  //       () => unrar(file, { list: false }), // fallback to rar
+  //     );
+  //   }
+  // }
+  //
+  // console.log(`Unzipped all submission of ${week}`);
+
+  // const folders = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
+  //   withFileTypes: true,
+  // });
+  //
+  // return folders.filter((e) => e.isDirectory());
+
+  return dirents;
 }
 
 export async function rmAssignment(week: string) {
   await rimraf(path.join(SUBMISSION_PATH, week));
 }
 
+export async function evaluate(week: string, dirents: Path[]) {
+  const evalFn = EvalFns[week];
+
+  for (const dirent of dirents) {
+    const file = path.parse(dirent.fullpath());
+
+    // console.log(file.name);
+    const evalted = await evalFn(file);
+    console.log(evalted);
+  }
+}
+
 export async function grade(week: string) {
-  await unzipAssignment(week);
+  const dirents = await unzipAssignment(week);
+  const evaluated = await evaluate(week, dirents);
 
   // await rmAssignment(week);
+
+  return evaluated;
 }

@@ -25,8 +25,8 @@ async function main() {
 
   for (const week of weeks) {
     console.log(`Executing week ${week.name}`);
-    console.log(await readWeekReport(week.name));
-    // await grade(week.name);
+    // console.log(await readWeekReport(week.name));
+    await grade(week.name);
     // await downloadSubmission(week.id, week.name);
     // await downloadReportPhp(week.id, week.name);
     // await exportWeekReport(week.name);
