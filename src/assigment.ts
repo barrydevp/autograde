@@ -1,12 +1,13 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
-import { Path, globSync } from 'glob';
+import { Path, glob, globSync } from 'glob';
 import { rimraf } from 'rimraf';
-import { COOKIE, SUBMISSION_PATH } from './constants';
-import EvalFns from './evaluates';
-import { unrar, unzip } from './utils';
+import pmap from 'p-map';
+import { COOKIE, SUBMISSION_PATH } from './constants.js';
+import EvalFns from './evaluates/index.js';
+import { unrar, unzip } from './utils.js';
 
 export async function downloadSubmission(id: string, week: string) {
   const buffer = await fetch(
@@ -43,54 +44,154 @@ export async function downloadSubmission(id: string, week: string) {
   await finished(Readable.fromWeb(buffer).pipe(zipOut));
 }
 
+export type UnzipResult = {
+  dirent: Path;
+  error?: any;
+};
+
 export async function unzipAssignment(week: string) {
+  console.log(`Unzipping ${week}.zip`);
   // await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
-  // console.log(`Unzipped ${week}.zip`);
-  //
+  console.log(`Unzipped ${week}.zip`);
+
   const dirents = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
     withFileTypes: true,
   }).filter((e) => e.isFile());
 
-  // for (const dirent of dirents) {
-  //   const file = dirent.fullpath();
-  //   const filePath = path.parse(file);
-  //   if (filePath.ext === '.rar') {
-  //     await unrar(file, { list: false });
-  //   } else {
-  //     await unzip(file, { list: false }).catch(
-  //       () => unrar(file, { list: false }), // fallback to rar
-  //     );
-  //   }
-  // }
-  //
-  // console.log(`Unzipped all submission of ${week}`);
+  const result = await pmap(
+    dirents,
+    async (dirent) => {
+      const file = dirent.fullpath();
+      const filePath = path.parse(file);
+      const r: UnzipResult = {
+        dirent,
+      };
+      // try {
+      //   console.log(`  Unzipping ${dirent.name}`);
+      //   if (filePath.ext === '.rar') {
+      //     await unrar(file, { list: false });
+      //     console.log(`  Unrared ${dirent.name}`);
+      //   } else {
+      //     await unzip(file, { list: false }).catch(
+      //       () => unrar(file, { list: false }), // fallback to rar
+      //     );
+      //     console.log(`  Unzipped ${dirent.name}`);
+      //   }
+      // } catch (e) {
+      //   console.error(`  Unzip ${dirent.name} error: ${e.message}`);
+      //   r.error = e;
+      // }
 
-  // const folders = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
-  //   withFileTypes: true,
-  // });
-  //
-  // return folders.filter((e) => e.isDirectory());
+      return r;
+    },
+    { concurrency: 2 },
+  );
 
-  return dirents;
+  console.log(`Unzipped all submission of ${week}`);
+
+  return result;
 }
 
 export async function rmAssignment(week: string) {
   await rimraf(path.join(SUBMISSION_PATH, week));
 }
 
-export async function evaluate(week: string, dirents: Path[]) {
+export function getNestedZipping(dirents: Path[]) {
+  if (dirents.length == 1 && dirents[0].isDirectory()) {
+    return dirents[0];
+  }
+
+  if (dirents.length == 2) {
+    const macosDirentIdx = dirents.findIndex((d) => {
+      return d.isDirectory() && d.name.includes('MACOS');
+    });
+
+    if (macosDirentIdx > -1 && dirents[1 - macosDirentIdx].isDirectory()) {
+      return dirents[1 - macosDirentIdx];
+    }
+  }
+
+  return null;
+}
+
+export async function goNestedZipping(dirents: Path[]) {
+  const nestedDirent = getNestedZipping(dirents);
+  if (nestedDirent) {
+    return await glob(`${nestedDirent.fullpath()}/*`, {
+      stat: true,
+      withFileTypes: true,
+    });
+  }
+
+  return dirents;
+}
+
+export async function initEvalParams(baseDirent: Path) {
+  const filePath = path.parse(baseDirent.fullpath());
+
+  const dirents = await glob(`${path.join(filePath.dir, filePath.name)}/*`, {
+    stat: true,
+    withFileTypes: true,
+  }).then((dirs) => goNestedZipping(dirs));
+  // nested one level due to zipping of folder
+  const files = await pmap(dirents, async (dirent) => {
+    return {
+      dirent,
+      path: path.parse(dirent.fullpath()),
+    };
+  });
+
+  return {
+    baseDirent: baseDirent,
+    files,
+  };
+}
+
+export type EvalFnParams = Awaited<ReturnType<typeof initEvalParams>>;
+export type EvalFnReturn = {
+  grade: number;
+  log: string;
+};
+export type EvalResult = EvalFnReturn & {
+  entry: Path;
+};
+
+export async function evaluate(week: string, dirents: UnzipResult[]) {
+  console.log(`Run evaluate`);
   const evalFn = EvalFns[week];
 
-  for (const dirent of dirents) {
-    const file = path.parse(dirent.fullpath());
+  const evals: EvalResult[] = [];
 
-    // console.log(file.name);
-    const evalted = await evalFn(file);
-    console.log(evalted);
+  for (const { dirent } of dirents) {
+    const params = await initEvalParams(dirent);
+    const evalted: EvalFnReturn = await evalFn(params);
+
+    evals.push({ entry: dirent, ...evalted });
+    // break;
   }
+
+  console.log(
+    evals.map((e) => ({
+      grade: e.grade,
+      log: e.log,
+    })),
+  );
+
+  console.log('\n\n');
+  evals.forEach((e) => {
+    if (e.grade < 100) {
+      console.log({
+        grade: e.grade,
+        log: e.log,
+      });
+    }
+  });
+
+  return evals;
 }
 
 export async function grade(week: string) {
+  // await rmAssignment(week);
   const dirents = await unzipAssignment(week);
   const evaluated = await evaluate(week, dirents);
 

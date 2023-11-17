@@ -1,8 +1,9 @@
-import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import { parse, NodeType } from 'node-html-parser';
-import { COOKIE, DATA_PATH, SUBMISSION_PATH } from './constants';
-import { dfs, fromCsv, toCsv } from './utils';
+import { COOKIE, DATA_PATH, SUBMISSION_PATH } from './constants.js';
+import { dfs, fromCsv, toCsv } from './utils.js';
+import { EvalResult, grade } from './assigment.js';
 
 const RAW_COLS = [
   'Select',
@@ -110,17 +111,20 @@ export async function exportWeekReport(week: string) {
   await fs.writeFile(path.join(DATA_PATH, `${week}.csv`), csvStr);
 }
 
-export async function readWeekReport(week: string) {
+export async function readWeekReport(
+  week: string,
+): Promise<Record<string, string>[]> {
   const data = await fromCsv(
     path.join(DATA_PATH, `${week}.csv`),
     true,
     // ACCEPTED_RAW_COLS.map((i) => RAW_COLS[i]),
   );
 
-  return data.reduce((p, e) => {
-    p[e[getColKey('id')]] = e;
-    return p;
-  }, {});
+  return data;
+  // return data.reduce((p, e) => {
+  //   p[e[getColKey('id')]] = e;
+  //   return p;
+  // }, {});
 }
 
 export async function downloadReportPhp(id: string, week: string) {
@@ -150,4 +154,75 @@ export async function downloadReportPhp(id: string, week: string) {
   });
 
   await fs.writeFile(path.join(SUBMISSION_PATH, `${week}.php`), data);
+}
+
+export async function exportAssignmentReport(
+  week: string,
+  graded: EvalResult[],
+) {
+  const weekReport = await readWeekReport(week);
+
+  const mapByFile = graded.reduce(
+    (p, e) => {
+      p[e.entry.name] = e;
+      return p;
+    },
+    {} as Record<string, EvalResult>,
+  );
+
+  const assignmentJson = weekReport.map((e) => {
+    const grade = mapByFile[e[getColKey('file')]];
+    let mark = grade && grade.grade;
+    let note = '';
+
+    if (!mark) {
+      mark = 0;
+    } else {
+      const status = e[getColKey('status')];
+      if (status.includes('late')) {
+        const daysp = /(\d+)\s+days?/.exec(status);
+        let days = 0;
+        if (daysp) {
+          days = parseInt(daysp[1]);
+        }
+        if (days >= 10) {
+          note += 'nop muon qua 10 ngay 50% diem';
+          mark = Math.ceil((mark * 5) / 10);
+        } else if (days >= 1) {
+          note += 'nop muon qua 1 ngay 70% diem';
+          mark = Math.ceil((mark * 7) / 10);
+        } else {
+          const hoursp = /(\d+)\s+hours?/.exec(status);
+          let hours = 0;
+          if (hoursp) {
+            hours = parseInt(hoursp[1]);
+          }
+          if (hours > 12) {
+            note += 'nop muon qua 12 gio 80% diem';
+            mark = Math.ceil((mark * 8) / 10);
+          } else if (hours >= 1) {
+            note += 'nop muon qua 1 gio 90% diem';
+            mark = Math.ceil((mark * 9) / 10);
+          }
+        }
+      }
+    }
+
+    return {
+      id: e[getColKey('id')],
+      name: e[getColKey('name')],
+      status: e[getColKey('status')],
+      last_modified: e[getColKey('last_modified')],
+      file: e[getColKey('file')],
+      log: (grade && grade.log) || '',
+      grade: mark.toString(),
+      note: note,
+    };
+  });
+
+  const csvStr = toCsv(
+    Object.keys(assignmentJson[0]),
+    assignmentJson.map((e) => Object.values(e)),
+  );
+  await fs.writeFile(path.join(DATA_PATH, `${week}_graded.csv`), csvStr);
 }

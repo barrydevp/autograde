@@ -4,6 +4,8 @@ import { stringify } from 'csv-stringify/sync';
 import { parse } from 'csv-parse/sync';
 import { Node } from 'node-html-parser';
 import { exec, spawn } from 'node:child_process';
+import __slugify from 'slugify';
+const _slugify = __slugify as any;
 
 export function dfs(root: Node, fn: (node: Node) => boolean) {
   if (!root) {
@@ -101,10 +103,18 @@ export async function unrar(file: string, { list }: { list?: boolean } = {}) {
     if (list) {
       args.push('l', file);
     } else {
-      args.push('e', file, `${path.join(filePath.dir, filePath.name)}/`);
+      args.push('x', file, `${path.join(filePath.dir, filePath.name)}/`);
     }
 
     const cmd = `unrar`;
+    // spawn(`${cmd} ${shellescape(args).join(' ')}`, (err, stdout, stderr) => {
+    //   if (err || stderr) {
+    //     rj(err || stderr);
+    //   } else {
+    //     rs(stdout);
+    //   }
+    // });
+
     exec(`${cmd} ${shellescape(args).join(' ')}`, (err, stdout, stderr) => {
       if (err || stderr) {
         rj(err || stderr);
@@ -112,5 +122,34 @@ export async function unrar(file: string, { list }: { list?: boolean } = {}) {
         rs(stdout);
       }
     });
+  });
+}
+
+export async function du(file: string) {
+  return new Promise<number>((rs, rj) => {
+    const args = ['-bs', file];
+
+    const cmd = `du`;
+    exec(`${cmd} ${shellescape(args).join(' ')}`, (err, stdout, stderr) => {
+      if (err || stderr) {
+        rj(err || new Error(stderr));
+      } else {
+        const parsed = /^(\d+)\s/.exec(stdout.split('\n')[0]);
+        if (!parsed) {
+          throw new Error(stdout);
+        }
+        rs(parseInt(parsed[1]));
+      }
+    });
+  });
+}
+
+export function slugify(str: string) {
+  return _slugify(str, {
+    replacement: '',
+    lower: true,
+    remove: /[*+~()'"!:@\-_]/g,
+    locale: 'vi',
+    // strict: true,
   });
 }
