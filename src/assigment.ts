@@ -49,9 +49,9 @@ export type UnzipResult = {
   error?: any;
 };
 
-export async function unzipAssignment(week: string) {
+export async function unzipAssignment(week: string, is_unzip?: boolean) {
   console.log(`Unzipping ${week}.zip`);
-  // await unzip(path.join(SUBMISSION_PATH, `${week}.zip`));
+  is_unzip && (await unzip(path.join(SUBMISSION_PATH, `${week}.zip`)));
   console.log(`Unzipped ${week}.zip`);
 
   const dirents = globSync(`${path.join(SUBMISSION_PATH, week)}/*/*`, {
@@ -66,21 +66,23 @@ export async function unzipAssignment(week: string) {
       const r: UnzipResult = {
         dirent,
       };
-      // try {
-      //   console.log(`  Unzipping ${dirent.name}`);
-      //   if (filePath.ext === '.rar') {
-      //     await unrar(file, { list: false });
-      //     console.log(`  Unrared ${dirent.name}`);
-      //   } else {
-      //     await unzip(file, { list: false }).catch(
-      //       () => unrar(file, { list: false }), // fallback to rar
-      //     );
-      //     console.log(`  Unzipped ${dirent.name}`);
-      //   }
-      // } catch (e) {
-      //   console.error(`  Unzip ${dirent.name} error: ${e.message}`);
-      //   r.error = e;
-      // }
+      if (is_unzip) {
+        try {
+          console.log(`  Unzipping ${dirent.name}`);
+          if (filePath.ext === '.rar') {
+            await unrar(file, { list: false });
+            console.log(`  Unrared ${dirent.name}`);
+          } else {
+            await unzip(file, { list: false }).catch(
+              () => unrar(file, { list: false }), // fallback to rar
+            );
+            console.log(`  Unzipped ${dirent.name}`);
+          }
+        } catch (e) {
+          console.error(`  Unzip ${dirent.name} error: ${e.message}`);
+          r.error = e;
+        }
+      }
 
       return r;
     },
@@ -158,7 +160,7 @@ export type EvalResult = EvalFnReturn & {
 
 export async function evaluate(week: string, dirents: UnzipResult[]) {
   console.log(`Run evaluate`);
-  const evalFn = EvalFns[week];
+  const evalFn = EvalFns[week] || EvalFns['noop'];
 
   const evals: EvalResult[] = [];
 
@@ -178,24 +180,28 @@ export async function evaluate(week: string, dirents: UnzipResult[]) {
   );
 
   console.log('\n\n');
-  evals.forEach((e) => {
-    if (e.grade < 100) {
-      console.log({
-        grade: e.grade,
-        log: e.log,
-      });
-    }
-  });
+  console.log(
+    '\n\n' +
+      evals.filter((e) => {
+        if (e.grade < 100) {
+          console.log({
+            grade: e.grade,
+            log: e.log,
+          });
+          return true;
+        }
+      }).length,
+  );
 
   return evals;
 }
 
-export async function grade(week: string) {
-  // await rmAssignment(week);
-  const dirents = await unzipAssignment(week);
+export async function grade(week: string, is_unzip?: boolean) {
+  is_unzip && (await rmAssignment(week));
+  const dirents = await unzipAssignment(week, is_unzip);
   const evaluated = await evaluate(week, dirents);
 
-  // await rmAssignment(week);
+  // is_unzip && (await rmAssignment(week));
 
   return evaluated;
 }

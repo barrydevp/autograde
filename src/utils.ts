@@ -76,7 +76,7 @@ export async function unzip(file: string, { list }: { list?: boolean } = {}) {
   const filePath = path.parse(file);
 
   return new Promise((rs, rj) => {
-    const args = ['-O', 'UTF-8'];
+    const args = ['-O', 'UTF-8', '-o'];
     if (list) {
       args.push('-l');
     } else {
@@ -103,7 +103,14 @@ export async function unrar(file: string, { list }: { list?: boolean } = {}) {
     if (list) {
       args.push('l', file);
     } else {
-      args.push('x', file, `${path.join(filePath.dir, filePath.name)}/`);
+      args.push(
+        'x',
+        '-o+',
+        // '-ai',
+        // '-y',
+        file,
+        `${path.join(filePath.dir, filePath.name)}/`,
+      );
     }
 
     const cmd = `unrar`;

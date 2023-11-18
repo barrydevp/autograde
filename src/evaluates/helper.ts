@@ -6,10 +6,6 @@ export class Evltor {
     private _log: string = '',
   ) {}
 
-  start() {
-    this._log += '<::>';
-  }
-
   checkS(name: string) {
     this._cnum++;
     this._log += `<c${this._cnum}="${name}">`;
@@ -24,10 +20,6 @@ export class Evltor {
     if (pass) {
       this._cpass++;
     }
-  }
-
-  end() {
-    this._log += '<::>';
   }
 
   print() {
